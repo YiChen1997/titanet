@@ -38,7 +38,6 @@ def get_dataloader(
         num_workers=num_workers,
         collate_fn=partial(collate_fn, n_mels=n_mels),
         pin_memory=True,
-        drop_last=False,
         generator=generator,
         persistent_workers=True,
         drop_last=True,
