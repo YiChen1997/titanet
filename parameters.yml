@@ -10,8 +10,8 @@ training:
     weight_decay: 0.0
   checkpoints_path: "./checkpoints"
   checkpoints_frequency: 25 # epochs
-  batch_size: 8
-  epochs: 250
+  batch_size: 12
+  epochs: 80
   loss: "ce"
 
 figures:
