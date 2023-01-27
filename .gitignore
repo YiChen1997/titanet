@@ -142,3 +142,6 @@ pretrained/
 # Wandb
 init/wandb_api_key_file
 wandb/
+
+#idea
+.idea
