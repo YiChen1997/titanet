@@ -65,8 +65,8 @@ baseline:
 
 wandb:
   enabled: true
-  entity: "wadaboa"
-  project: "titanet"
+  entity: "ycen"
+  project: "colab"
   api_key_file: "./init/wandb_api_key_file"
 
 generic:
