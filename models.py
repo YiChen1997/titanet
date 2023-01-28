@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-
 import modules, losses
 
 
@@ -14,14 +13,14 @@ class DumbConvNet(nn.Module):
     """
 
     def __init__(
-        self,
-        n_mels,
-        loss_function=None,
-        hidden_size=256,
-        embedding_size=192,
-        kernel_size=3,
-        n_layers=1,
-        device="cpu",
+            self,
+            n_mels,
+            loss_function=None,
+            hidden_size=256,
+            embedding_size=192,
+            kernel_size=3,
+            n_layers=1,
+            device="cpu",
     ):
         super(DumbConvNet, self).__init__()
 
@@ -46,7 +45,6 @@ class DumbConvNet(nn.Module):
         """
         Given input spectrograms of shape [B, M, T], DumbConvNet returns
         utterance-level embeddings of shape [B, E]
-
         B: batch size
         M: number of mel frequency bands
         T: maximum number of time steps (frames)
@@ -62,7 +60,7 @@ class DumbConvNet(nn.Module):
 
         # Training mode
         assert (
-            self.loss_function is not None
+                self.loss_function is not None
         ), "Loss function should not be None in training mode"
         return self.loss_function(embeddings, speakers)
 
@@ -72,21 +70,20 @@ class DVectorBaseline(nn.Module):
     Simple recurrent module that splits spectrograms in segments
     and computes embeddings as the average embedding of consecutive
     segments
-
     "Generalized End-to-End Loss for Speaker Verification",
     Wan et al., https://arxiv.org/abs/1710.10467
     """
 
     def __init__(
-        self,
-        n_mels,
-        loss_function=None,
-        n_lstm_layers=3,
-        hidden_size=768,
-        lstm_average=True,
-        embedding_size=256,
-        segment_length=160,
-        device="cpu",
+            self,
+            n_mels,
+            loss_function=None,
+            n_lstm_layers=3,
+            hidden_size=768,
+            lstm_average=True,
+            embedding_size=256,
+            segment_length=160,
+            device="cpu",
     ):
         super(DVectorBaseline, self).__init__()
 
@@ -107,7 +104,6 @@ class DVectorBaseline(nn.Module):
         """
         Given input spectrograms of shape [B, M, T], it returns
         utterance-level embeddings of shape [B, E]
-
         B: batch size
         N: number of segments for each spectrogram
         M: number of mel frequency bands
@@ -128,11 +124,9 @@ class DVectorBaseline(nn.Module):
             for s in padded_spectrograms
         ]
         segments = torch.cat(segments_list)
-
         # Forward LSTM pass
         # [B * N, M, S] -> [B * N, S, H]
         outputs, _ = self.recurrent(segments.transpose(1, 2))
-
         # Collapse LSTM hidden states by either averaging or taking the last
         # [B * N, S, H] -> [B * N, H]
         outputs = outputs.mean(dim=1) if self.lstm_average else outputs[:, -1, :]
@@ -154,7 +148,7 @@ class DVectorBaseline(nn.Module):
 
         # Training mode
         assert (
-            self.loss_function is not None
+                self.loss_function is not None
         ), "Loss function should not be None in training mode"
         return self.loss_function(embeddings, speakers)
 
@@ -164,7 +158,6 @@ class TitaNet(nn.Module):
     TitaNet is a neural network for extracting speaker representations,
     by leveraging 1D depth-wise separable convolutions with SE layers
     and a channel attention based statistic pooling layer
-
     "TitaNet: Neural Model for speaker representation with 1D Depth-wise
     separable convolutions and global context", Kologuri et al.,
     https://arxiv.org/abs/2110.04410
@@ -173,25 +166,24 @@ class TitaNet(nn.Module):
     TARGET_PARAMS = {"s": 6.4, "m": 13.4, "l": 25.3}
 
     def __init__(
-        self,
-        n_mels,
-        n_mega_blocks,
-        n_sub_blocks,
-        encoder_hidden_size,
-        encoder_output_size,
-        embedding_size,
-        mega_block_kernel_size,
-        prolog_kernel_size=3,
-        epilog_kernel_size=1,
-        attention_hidden_size=128,
-        se_reduction=16,
-        simple_pool=False,
-        loss_function=None,
-        dropout=0.5,
-        device="cpu",
+            self,
+            n_mels,
+            n_mega_blocks,
+            n_sub_blocks,
+            encoder_hidden_size,
+            encoder_output_size,
+            embedding_size,
+            mega_block_kernel_size,
+            prolog_kernel_size=3,
+            epilog_kernel_size=1,
+            attention_hidden_size=128,
+            se_reduction=16,
+            simple_pool=False,
+            loss_function=None,
+            dropout=0.5,
+            device="cpu",
     ):
         super(TitaNet, self).__init__()
-
         # Define encoder and decoder
         self.encoder = Encoder(
             n_mels,
@@ -211,10 +203,8 @@ class TitaNet(nn.Module):
             embedding_size,
             simple_pool=simple_pool,
         )
-
         # Store loss function
         self.loss_function = loss_function
-
         # Transfer to device
         self.to(device)
 
@@ -224,17 +214,17 @@ class TitaNet(nn.Module):
         divide it by the given number
         """
         return (
-            sum([np.prod(p.size()) for p in self.parameters() if p.requires_grad]) / div
+                sum([np.prod(p.size()) for p in self.parameters() if p.requires_grad]) / div
         )
 
     @classmethod
     def find_n_mega_blocks(
-        cls,
-        embedding_size,
-        n_mels,
-        model_size,
-        loss_function=None,
-        n_mega_blocks_trials=None,
+            cls,
+            embedding_size,
+            n_mels,
+            model_size,
+            loss_function=None,
+            n_mega_blocks_trials=None,
     ):
         """
         Find the best number of mega blocks s.t. the spawned TitaNet model
@@ -261,16 +251,17 @@ class TitaNet(nn.Module):
 
     @classmethod
     def get_titanet(
-        cls,
-        embedding_size=192,
-        n_mels=80,
-        n_mega_blocks=None,
-        model_size="s",
-        attention_hidden_size=128,
-        simple_pool=False,
-        loss_function=None,
-        dropout=0.5,
-        device="cpu",
+            cls,
+            embedding_size=192,
+            n_mels=80,
+            n_mega_blocks=None,
+            model_size="s",
+            attention_hidden_size=128,
+            simple_pool=False,
+            loss_function=None,
+            dropout=0.5,
+            device="cpu",
+            stat_polling=False,
     ):
         """
         Return one of the three TitaNet instances described in the paper,
@@ -282,8 +273,8 @@ class TitaNet(nn.Module):
             "l",
         ), "Unsupported model size"
         assert (
-            isinstance(loss_function, losses.MetricLearningLoss)
-            or loss_function is None
+                isinstance(loss_function, losses.MetricLearningLoss)
+                or loss_function is None
         ), "Unsupported loss function"
 
         # Get the best number of mega blocks
@@ -319,7 +310,6 @@ class TitaNet(nn.Module):
         """
         Given input spectrograms of shape [B, M, T], TitaNet returns
         utterance-level embeddings of shape [B, E]
-
         B: batch size
         M: number of mel frequency bands
         T: maximum number of time steps (frames)
@@ -334,7 +324,7 @@ class TitaNet(nn.Module):
 
         # Training mode
         assert (
-            self.loss_function is not None
+                self.loss_function is not None
         ), "Loss function should not be None in training mode"
         return self.loss_function(embeddings, speakers)
 
@@ -345,24 +335,23 @@ class Encoder(nn.Module):
     of mega blocks and ends with an epilogue block; all blocks comprise
     convolutions, batch normalization, activation and dropout, while mega
     blocks are also equipped with residual connections and SE modules
-
     "TitaNet: Neural Model for speaker representation with 1D Depth-wise
     separable convolutions and global context", Kologuri et al.,
     https://arxiv.org/abs/2110.04410
     """
 
     def __init__(
-        self,
-        n_mels,
-        n_mega_blocks,
-        n_sub_blocks,
-        hidden_size,
-        output_size,
-        mega_block_kernel_size,
-        prolog_kernel_size=3,
-        epilog_kernel_size=1,
-        se_reduction=16,
-        dropout=0.5,
+            self,
+            n_mels,
+            n_mega_blocks,
+            n_sub_blocks,
+            hidden_size,
+            output_size,
+            mega_block_kernel_size,
+            prolog_kernel_size=3,
+            epilog_kernel_size=1,
+            se_reduction=16,
+            dropout=0.5,
     ):
         super(Encoder, self).__init__()
 
@@ -387,12 +376,11 @@ class Encoder(nn.Module):
         """
         Given input spectrograms of shape [B, M, T], return encodings
         of shape [B, DE, T]
-
         B: batch size
-        M: number of mel frequency bands
-        T: maximum number of time steps (frames)
-        DE: encoding output size
-        H: hidden size
+        M: number of mel frequency bands : default = 40
+        T: maximum number of time steps (frames)  : 帧数
+        DE: encoding output size  : 输出尺寸
+        H: hidden size : 隐藏层数
         """
         # [B, M, T] -> [B, H, T]
         prolog_outputs = self.prolog(spectrograms)
@@ -411,20 +399,20 @@ class MegaBlock(nn.Module):
     convolution followed by batch normalization, activation and dropout;
     the output of the sequence of sub-blocks is then processed by a SE
     module and merged with the initial input through a skip connection
-
     "TitaNet: Neural Model for speaker representation with 1D Depth-wise
     separable convolutions and global context", Kologuri et al.,
     https://arxiv.org/abs/2110.04410
     """
 
     def __init__(
-        self,
-        input_size,
-        output_size,
-        kernel_size,
-        n_sub_blocks,
-        se_reduction=16,
-        dropout=0.5,
+            self,
+            input_size,
+            output_size,
+            kernel_size,
+            n_sub_blocks,
+            se_reduction=16,
+            dropout=0.5,
+            se_res2block=False,
     ):
         super(MegaBlock, self).__init__()
 
@@ -432,12 +420,16 @@ class MegaBlock(nn.Module):
         self.dropout = dropout
 
         # Define sub-blocks composed of depthwise convolutions
-        channels = [input_size] + [output_size] * n_sub_blocks
+        channels = [input_size] + [output_size] * n_sub_blocks  # [input_size, output_size, ..., output_size]
+        if se_res2block:
+            se = modules.Bottle2neck
+        else:
+            se = modules.SqueezeExcitation
         self.sub_blocks = nn.Sequential(
             *[
                 modules.ConvBlock1d(
-                    in_channels,
-                    out_channels,
+                    in_channels,  # [input_size, output_size, ..., output_size], size = 1 + (n_sub_blocks-1)
+                    out_channels,  # [output_size, ..., output_size], size = n_sub_blocks
                     kernel_size,
                     activation="relu",
                     dropout=dropout,
@@ -445,7 +437,8 @@ class MegaBlock(nn.Module):
                 )
                 for in_channels, out_channels in zip(channels[:-1], channels[1:])
             ],
-            modules.SqueezeExcitation(output_size, reduction=se_reduction)
+            # modules.SqueezeExcitation(output_size, reduction=se_reduction)
+            se(output_size, reduction=se_reduction)
         )
 
         # Define the final skip connection
@@ -458,7 +451,6 @@ class MegaBlock(nn.Module):
         """
         Given prolog outputs of shape [B, H, T], return
         a feature tensor of shape [B, H, T]
-
         B: batch size
         H: hidden size
         T: maximum number of time steps (frames)
@@ -478,18 +470,17 @@ class Decoder(nn.Module):
     using an attentive statistics pooling layer and downsamples such
     representation using two linear layers, to obtain a fixed-size
     embedding vector first and class logits afterwards
-
     "TitaNet: Neural Model for speaker representation with 1D Depth-wise
     separable convolutions and global context", Kologuri et al.,
     https://arxiv.org/abs/2110.04410
     """
 
     def __init__(
-        self,
-        encoder_output_size,
-        attention_hidden_size,
-        embedding_size,
-        simple_pool=False,
+            self,
+            encoder_output_size,
+            attention_hidden_size,
+            embedding_size,
+            simple_pool=False,
     ):
         super(Decoder, self).__init__()
 
@@ -516,7 +507,6 @@ class Decoder(nn.Module):
         """
         Given encoder outputs of shape [B, DE, T], return a tensor
         of shape [B, E]
-
         B: batch size
         T: maximum number of time steps (frames)
         DE: encoding output size
@@ -535,7 +525,6 @@ class AttentiveStatsPooling(nn.Module):
     mechanism to give different weights to different frames and
     generates not only weighted means but also weighted variances,
     to form utterance-level features from frame-level features
-
     "Attentive Statistics Pooling for Deep Speaker Embedding",
     Okabe et al., https://arxiv.org/abs/1803.10963
     """
@@ -554,7 +543,6 @@ class AttentiveStatsPooling(nn.Module):
         """
         Given encoder outputs of shape [B, DE, T], return
         pooled outputs of shape [B, DE * 2]
-
         B: batch size
         T: maximum number of time steps (frames)
         DE: encoding output size

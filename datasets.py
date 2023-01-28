@@ -1,6 +1,7 @@
 import os
 import itertools
 import csv
+import random
 import shutil
 import logging
 from pathlib import Path
@@ -21,13 +22,33 @@ from torchaudio.datasets.utils import extract_archive
 
 import utils
 
+"""
+数据集加载函数：
+    - get_dataloader          返回dataloader，该loader从给定数据集随机返回一个batch的数据
+    - collate_fn              对数据的额外操作
+    - get_datasets            从给定路径返回数据集的instance，并分成训练集、验证集、测试集
+    - SpeakerDataset          dataset的公共基类，包含transforms方法，按索引返回数据
+        - LibriSpeechDataset  自定义LibriSpeech dataset
+        - VCTK dataset        自定义VCTK dataset
+        - VoxCeleb1 dataset   自定义VoxCeleb1 dataset
+        - VoxCeleb2 dataset   自定义VoxCeleb2 dataset
+"""
+
 
 def get_dataloader(
-    dataset, batch_size=1, shuffle=True, num_workers=4, n_mels=80, seed=42
+        dataset, batch_size=1, shuffle=True, num_workers=4, n_mels=80, seed=42
 ):
     """
     Return a dataloader that randomly (or sequentially) samples a batch
     of data from the given dataset
+
+    Args:
+        dataset:
+        batch_size: 每个批次大小
+        shuffle: 是否打乱
+        num_workers: 数据的子线程g
+        n_mels: collate_fn参数
+        seed: 随机数z
     """
     generator = torch.Generator()
     generator.manual_seed(seed)
@@ -48,6 +69,7 @@ def collate_fn(batch, n_mels=80):
     """
     Convert a list of samples extracted from the dataset to
     a proper batch, i.e. a tuple of stacked tensors
+    返回格式: spectrograms, spectrogram_lengths, speakers(数据、数据长度、说话人id)
     """
     # Compute lengths and convert data to lists
     spectrogram_lengths, speakers = [], []
@@ -73,21 +95,43 @@ def collate_fn(batch, n_mels=80):
 
 
 def get_datasets(
-    dataset_root,
-    train_transformations=None,
-    non_train_transformations=None,
-    val=True,
-    val_utterances_per_speaker=10,
-    test=True,
-    test_speakers=10,
-    test_utterances_per_speaker=10,
+        dataset_root,
+        train_transformations=None,
+        non_train_transformations=None,
+        val=True,
+        val_utterances_per_speaker=10,
+        test=True,
+        test_speakers=10,
+        test_utterances_per_speaker=10,
 ):
     """
     Return an instance of the dataset specified in the given
-    parameters, splitted into training, validation and test sets
+    parameters, split into training, validation and test sets
     """
     # Get the dataset
     full_dataset = LibriSpeechDataset(dataset_root)
+
+    # test dataset indexing
+    # {
+    #     "waveform": ...,
+    #     "sample_rate": ...,
+    #     "spectrogram": ...,
+    #     "speaker": ...,
+    #     "speaker_id": ...
+    # }
+    random_index = random.randint(0, len(full_dataset))
+    random_example = full_dataset[random_index]
+    print(f"random_example: {random_example}")
+
+    # dataset_info = full_dataset.info()
+    # print(dataset_info)
+    # {'num_utterances': 28539,
+    # 'num_speakers': 251,
+    # 'total_duration': 100.59,
+    # 'utterances_per_speaker_mean': 113.7,
+    #  'utterances_per_speaker_std': 15.18,
+    #  'durations_per_speaker_mean': 0.4,
+    #  'durations_per_speaker_std': 0.04}
 
     # Compute train, validation and test utterances
     train_utterances, val_utterances, test_utterances = full_dataset.get_splits(
@@ -188,12 +232,12 @@ class SpeakerDataset:
         return len(self.speakers)
 
     def get_splits(
-        self,
-        val=True,
-        val_utterances_per_speaker=10,
-        test=True,
-        test_speakers=10,
-        test_utterances_per_speaker=10,
+            self,
+            val=True,
+            val_utterances_per_speaker=10,
+            test=True,
+            test_speakers=10,
+            test_utterances_per_speaker=10,
     ):
         """
         Return train, validation and test indices
@@ -204,24 +248,24 @@ class SpeakerDataset:
             train_start_utterance = 0
             if val:
                 val_utterances += self.speakers_utterances[s][
-                    :val_utterances_per_speaker
-                ]
+                                  :val_utterances_per_speaker
+                                  ]
                 train_start_utterance += val_utterances_per_speaker
             if test and i < test_speakers:
                 test_utterances += self.speakers_utterances[s][
-                    val_utterances_per_speaker : val_utterances_per_speaker
-                    + test_utterances_per_speaker
-                ]
+                                   val_utterances_per_speaker: val_utterances_per_speaker
+                                                               + test_utterances_per_speaker
+                                   ]
                 train_start_utterance += test_utterances_per_speaker
             train_utterances += self.speakers_utterances[s][train_start_utterance:]
 
         # Check split correctness
         assert (not val or len(val_utterances) > 0) and (
-            not test or len(test_utterances) > 0
+                not test or len(test_utterances) > 0
         ), "No validation or test utterances"
-        assert not utils.overlap(
+        assert not tools.overlap(
             train_utterances, val_utterances
-        ) and not utils.overlap(
+        ) and not tools.overlap(
             val_utterances, test_utterances
         ), "Splits are not disjoint"
 
@@ -257,7 +301,7 @@ class SpeakerDataset:
         div = 1 if not hours else 3600
         for speaker, utterances in self.speakers_utterances.items():
             durations_per_speaker[speaker] = (
-                sum(durations[idx] for idx in utterances) / div
+                    sum(durations[idx] for idx in utterances) / div
             )
         return durations_per_speaker
 
@@ -493,7 +537,7 @@ class VoxCeleb2(Dataset):
                 with open(split_path, "wb") as f:
                     for url, checksum in zip(urls, checksums):
                         file_path = os.path.join(root, os.path.basename(url))
-                        utils.download_auth_url_to_file(
+                        tools.download_auth_url_to_file(
                             url,
                             file_path,
                             self._USERNAME,
@@ -506,7 +550,7 @@ class VoxCeleb2(Dataset):
                 url = split_config["url"]
                 checksum = split_config["checksum"]
                 file_path = os.path.join(root, os.path.basename(url))
-                utils.download_auth_url_to_file(
+                tools.download_auth_url_to_file(
                     url, file_path, self._USERNAME, self._PASSWORD, hash_prefix=checksum
                 )
             extracted_paths = extract_archive(split_path)

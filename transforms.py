@@ -8,6 +8,9 @@ import torchaudio
 import torch.nn.functional as F
 import requests
 
+"""
+音频变化工具箱，包含深拷贝、加噪、变长、MelSpectrogram、随机截取给定长度、逆转、Tensor的device迁移、重采样
+"""
 
 def copy_example(example):
     """

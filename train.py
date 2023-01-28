@@ -1,27 +1,25 @@
+import os
 from argparse import ArgumentParser
+from datetime import datetime
 from functools import partial
 
 import torch
 import torch.optim as optim
 import yaml
 
-import datasets, transforms, models, learn, losses, utils
+import models, losses, transforms, utils, datasets, learn
 
 
-def train(params):
+def train(params, only_test=False, transform=False):
     """
     Training loop entry-point
     """
-    # Set random seed for reproducibility
-    # and get GPU if present
-    utils.set_seed(params.generic.seed)
-    device = utils.get_device()
-
+    tools.set_seed(params.generic.seed)
+    device = tools.get_device()
     # Set number of threads
     if params.generic.workers > 0:
         torch.set_num_threads(params.generic.workers)
 
-    # Get data transformations
     partial_get_transforms = partial(
         transforms.get_transforms,
         params.augmentation.enable,
@@ -42,6 +40,7 @@ def train(params):
         probability=params.augmentation.probability,
         device=device,
     )
+
     train_transformations = partial_get_transforms(training=True)
     non_train_transformations = partial_get_transforms(training=False)
 
@@ -75,6 +74,9 @@ def train(params):
         seed=params.generic.seed,
     )
 
+    run_name = ""
+    last_epoch = 0
+
     # Get loss function
     loss_params = dict()
     if params.training.loss in params.loss.__dict__:
@@ -85,7 +87,7 @@ def train(params):
 
     # Get model
     if params.dumb.enabled:
-        model = models.DumbConvNet(
+        model = titanetmodel.DumbConvNet(
             params.audio.spectrogram.n_mels,
             loss_function=loss_function,
             hidden_size=params.dumb.hidden_size,
@@ -94,7 +96,7 @@ def train(params):
             device=device,
         )
     elif params.baseline.enabled:
-        model = models.DVectorBaseline(
+        model = titanetmodel.DVectorBaseline(
             params.audio.spectrogram.n_mels,
             loss_function=loss_function,
             n_lstm_layers=params.baseline.n_layers,
@@ -108,7 +110,8 @@ def train(params):
         n_mega_blocks = None
         if params.titanet.n_mega_blocks:
             n_mega_blocks = params.titanet.n_mega_blocks
-        model = models.TitaNet.get_titanet(
+
+        model = titanetmodel.TitaNet.get_titanet(
             embedding_size=params.generic.embedding_size,
             n_mels=params.audio.spectrogram.n_mels,
             n_mega_blocks=n_mega_blocks,
@@ -120,12 +123,6 @@ def train(params):
             device=device,
         )
 
-    # Use backprop to chart dependencies
-    if params.generic.chart_dependencies:
-        utils.chart_dependencies(
-            model, n_mels=params.audio.spectrogram.n_mels, device=device
-        )
-
     # Get optimizer and scheduler
     optimizer_type = optim.SGD if params.training.optimizer == "sgd" else optim.Adam
     optimizer = optimizer_type(
@@ -133,7 +130,8 @@ def train(params):
         lr=params.training.optimizer.start_lr,
         weight_decay=params.training.optimizer.weight_decay,
     )
-    optimizer = utils.optimizer_to(optimizer, device=device)
+
+    optimizer = tools.optimizer_to(optimizer, device=device)
     lr_scheduler = None
     if params.training.optimizer.scheduler:
         lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -141,46 +139,80 @@ def train(params):
             T_max=params.training.epochs,
             eta_min=params.training.optimizer.end_lr,
         )
-        lr_scheduler = utils.scheduler_to(lr_scheduler, device=device)
+        lr_scheduler = tools.scheduler_to(lr_scheduler, device=device)
+
+    # 是否记载之前的模型
+    if params.titanet.load_checkpoint:
+        run_name = params.titanet.checkpoint_path
+        checkpoint_path = os.path.join(params.training.checkpoints_path, run_name)
+        model, optimizer, lr_scheduler, last_epoch = \
+            learn.load_last_checkpoint(model, optimizer, lr_scheduler, checkpoint_path + "/")
+
+    # Use backprop to chart dependencies
+    if params.generic.chart_dependencies:
+        tools.chart_dependencies(
+            model, n_mels=params.audio.spectrogram.n_mels, device=device
+        )
 
     # Start wandb logging
     wandb_run = None
-    run_name = utils.now()
+    run_name = run_name if run_name != "" else datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    print(f"Initialize scheduler at {run_name}")
     if params.wandb.enabled:
-        wandb_run = utils.init_wandb(
+        wandb_run = tools.init_wandb(
             params.wandb.api_key_file,
             params.wandb.project,
             params.wandb.entity,
             name=run_name,
             config=params.entries,
         )
+        print(f"Initialize wan_db successful")
 
-    # Perform training loop
-    learn.training_loop(
-        run_name,
-        params.training.epochs,
-        model,
-        optimizer,
-        train_dataloader,
-        params.training.checkpoints_path,
-        test_dataset=test_dataset if params.test.enabled else None,
-        val_dataloader=val_dataloader,
-        val_every=params.validation.every if params.validation.enabled else None,
-        figures_path=params.figures.path if params.figures.enabled else None,
-        reduction_method=params.figures.reduction_method,
-        lr_scheduler=lr_scheduler,
-        checkpoints_frequency=params.training.checkpoints_frequency,
-        wandb_run=wandb_run,
-        log_console=params.generic.log_console,
-        mindcf_p_target=params.test.mindcf_p_target,
-        mindcf_c_fa=params.test.mindcf_c_fa,
-        mindcf_c_miss=params.test.mindcf_c_miss,
-        device=device,
-    )
+    if not only_test and not transform:
+        # Perform training loop
+        learn.training_loop(
+            run_name,
+            last_epoch,
+            params.training.epochs,
+            model,
+            optimizer,
+            train_dataloader,
+            params.training.checkpoints_path,
+            test_dataset=test_dataset if params.test.enabled else None,
+            val_dataloader=val_dataloader,
+            val_every=params.validation.every if params.validation.enabled else None,
+            figures_path=params.figures.path+run_name if params.figures.enabled else None,  # figure_path+run_name
+            reduction_method=params.figures.reduction_method,
+            lr_scheduler=lr_scheduler,
+            checkpoints_frequency=params.training.checkpoints_frequency,
+            wandb_run=wandb_run,
+            log_console=params.generic.log_console,
+            mindcf_p_target=params.test.mindcf_p_target,
+            mindcf_c_fa=params.test.mindcf_c_fa,
+            mindcf_c_miss=params.test.mindcf_c_miss,
+            device=device,
+        )
+    if only_test and not transform:
+        learn.test_loop(
+            model,
+            test_dataset,
+            params.training.checkpoints_path+params.test.direct_path,
+            log_name=params.test.log_name,
+            wandb_run=wandb_run,
+            log_console=params.generic.log_console,
+            mindcf_p_target=params.test.mindcf_p_target,
+            mindcf_c_fa=params.test.mindcf_c_fa,
+            mindcf_c_miss=params.test.mindcf_c_miss,
+            device=device,
+        )
+
+    if transform:
+        learn.transform_model(model, "../exps/tita_exp1/2023-01-03_17-04-39/epoch_78.pth", device=device)
 
     # Stop wandb logging
     if params.wandb.enabled:
         wandb_run.finish()
+    print(f"The training is end!")
 
 
 if __name__ == "__main__":
@@ -194,9 +226,12 @@ if __name__ == "__main__":
         type=str,
     )
     args = parser.parse_args()
-    with open(args.params, "r") as params:
+    print(args.params)
+    with open(args.params, "r", encoding='UTF-8') as params:
         args = yaml.load(params, Loader=yaml.FullLoader)
-    params = utils.Struct(**args)
+    params = tools.Struct(**args)
 
     # Call the training function
     train(params)
+    # train(params, only_test=True)
+    # train(params, transform=True)
